@@ -18,6 +18,12 @@ class FunctionCallTracker(ast.NodeVisitor):
         self.current_function = full_name
         self.generic_visit(node)
         self.current_function = None
+    
+    def visit_ClassDef(self, node):
+        full_name = f"{self.module}.{node.name}"
+        self.definitions.append((node.name, node.lineno, full_name))
+        self.current_function = full_name
+        self.generic_visit(node)
 
     def visit_Call(self, node):
         if self.current_function:

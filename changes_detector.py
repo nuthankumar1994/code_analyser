@@ -1,8 +1,8 @@
 import os
 import ast
 import hashlib
-from impact_report import generate_impact_report, parse_project_for_calls, build_dependency_graph
-
+import difflib
+from typing import List, Dict
 def compute_code_hash(node):
     try:
         return hashlib.md5(ast.unparse(node).encode()).hexdigest()
@@ -13,15 +13,41 @@ class DefinitionExtractor(ast.NodeVisitor):
     def __init__(self, module_name):
         self.module = module_name
         self.definitions = {}  # { full_name: hash }
-
+        self.imports = []
+        self.calls = []
+        
     def visit_FunctionDef(self, node):
         full_name = f"{self.module}.{node.name}"
-        self.definitions[full_name] = compute_code_hash(node)
+        self.definitions[full_name] = {}
+        self.definitions[full_name]['hash'] = compute_code_hash(node)
+        self.definitions[full_name]['type'] = 'function'
+        self.definitions[full_name]['lineno'] = node.lineno
+        self.definitions[full_name]['end_lineno'] = node.end_lineno
         self.generic_visit(node)
 
     def visit_ClassDef(self, node):
         full_name = f"{self.module}.{node.name}"
-        self.definitions[full_name] = compute_code_hash(node)
+        self.definitions[full_name] = {}
+        self.definitions[full_name]['hash'] = compute_code_hash(node)
+        self.definitions[full_name]['type'] = 'class'
+        self.definitions[full_name]['lineno'] = node.lineno
+        self.definitions[full_name]['end_lineno'] = node.end_lineno
+        self.generic_visit(node)
+    
+    def visit_Import(self, node):
+        for alias in node.names:
+            self.imports.append(alias.name)
+    
+    def visit_ImportFrom(self, node):
+        if node.module:
+            self.imports.append(node.module)
+    
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name):
+            self.calls.append({
+                "function": node.func.id,
+                "lineno": node.lineno
+            })
         self.generic_visit(node)
 
 def get_py_files(root_dir):
@@ -54,12 +80,29 @@ def detect_changed_definitions(dir1, dir2):
 
         defs1 = extract_definitions(path1) if path1 else {}
         defs2 = extract_definitions(path2)
+        
+        with open(path1, "r", encoding="utf-8") as f:
+            original_code = f.read()
+        with open(path2, "r", encoding="utf-8") as f:
+            modified_code = f.read()
 
+        original_lines = original_code.splitlines()
+        modified_lines = modified_code.splitlines()
+        
         for name, hash2 in defs2.items():
             if name not in defs1:
                 changed_defs.append(name)
-            elif defs1[name] != hash2:
-                changed_defs.append(name)
+            elif defs1[name]['hash'] != hash2['hash']:
+                start = defs2[name]['lineno'] - 1
+                end = defs2.get('end_lineno', start + 1)
+                snippet_diff = difflib.unified_diff(
+                    original_lines[start:end] if original_lines != None else [],
+                    modified_lines[start:end] if modified_lines != None else [],
+                    fromfile=path1,
+                    tofile=path2,
+                    lineterm=''
+                ) 
+                changed_defs.append({"name": name, "type": hash2['type'], "diff": list(snippet_diff)})
 
     return changed_defs
 

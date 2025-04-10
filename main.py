@@ -15,5 +15,5 @@ defs, calls = parse_project_for_calls(old_version)
 G = build_dependency_graph(defs, calls)
 
 for change in changed:
-    generate_impact_report(G, change)
+    generate_impact_report(G, change, new_version)
 
