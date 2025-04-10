@@ -16,24 +16,20 @@ class DocstringWriter(ast.NodeTransformer):
         self.comment = comment
 
     def visit_FunctionDef(self, node):
-        # Check if the function starts at the given line
         if node.lineno == self.target_line:
             docstring = ast.get_docstring(node)
             new_docstring_node = make_docstring_node(docstring, self.comment)
             if docstring:
-                # Assumes the existing docstring is the first node in the function body.
                 node.body[0] = new_docstring_node
             else:
                 node.body.insert(0, new_docstring_node)
         return node
     
     def visit_ClassDef(self, node):
-        # Check if the function starts at the given line
         if node.lineno == self.target_line:
             docstring = ast.get_docstring(node)
             new_docstring_node = make_docstring_node(docstring, self.comment)
             if docstring:
-                # Assumes the existing docstring is the first node in the function body.
                 node.body[0] = new_docstring_node
             else:
                 node.body.insert(0, new_docstring_node)
